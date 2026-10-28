@@ -1,26 +1,19 @@
 import { ArrowRight, Flame, Keyboard, Sparkles } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { prefetch, useAtlas, useEntry } from "../atlas/context";
+import { formatDateHeader, greetingForHour, LEVEL_NAMES, topicName, WEEKDAYS } from "../lib/i18n";
 import { go, openWord } from "../lib/router";
 import { cue } from "../lib/sound";
 import { hashSeed } from "../lib/text";
 import { buildSession, masteredCount, todayPlan } from "../store/session";
 import { isMastered } from "../store/srs";
-import { dayKey, store, useStore } from "../store/store";
+import { dayKey, store, useLang, useStore, useT } from "../store/store";
 import { Galaxy } from "../galaxy/Galaxy";
 import { Highlight, Pronounce } from "../ui/EntryView";
 import { Illustration } from "../ui/Illustration";
 import { Ring } from "../ui/Ring";
 
 const BRAND = `${import.meta.env.BASE_URL}brand`;
-
-function greeting(h: number) {
-  if (h < 5) return "夜深了";
-  if (h < 11) return "早上好";
-  if (h < 14) return "中午好";
-  if (h < 18) return "下午好";
-  return "晚上好";
-}
 
 export function streakOf(days: Record<string, { r: number }>) {
   let n = 0;
@@ -37,13 +30,14 @@ export function Today() {
   const atlas = useAtlas();
   const progress = useStore((s) => s.progress);
   const settings = useStore((s) => s.settings);
+  const lang = useLang();
+  const t = useT();
   const plan = useMemo(() => todayPlan(atlas, progress, settings), [atlas, progress, settings]);
-  // Warm the first cards of today's journey so the session opens instantly.
   const firstIds = [...plan.due.slice(0, 4), ...plan.fresh.slice(0, 6)].join(",");
   useEffect(() => {
     const ids = firstIds.split(",").filter(Boolean);
-    const t = window.setTimeout(() => void prefetch(atlas, ids), 800);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => void prefetch(atlas, ids), 800);
+    return () => window.clearTimeout(timer);
   }, [atlas, firstIds]);
   const now = new Date();
   const today = progress.days[dayKey()];
@@ -67,7 +61,7 @@ export function Today() {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
     const k = dayKey(d);
-    return { k, label: "日一二三四五六"[d.getDay()], v: progress.days[k]?.r ?? 0, today: i === 6 };
+    return { k, label: WEEKDAYS[lang][d.getDay()], v: progress.days[k]?.r ?? 0, today: i === 6 };
   });
 
   const learned = Object.keys(progress.cards).length;
@@ -77,10 +71,8 @@ export function Today() {
   return (
     <div className="page today">
       <header className="greet">
-        <p className="eyebrow">
-          {now.getMonth() + 1}月{now.getDate()}日 · 星期{"日一二三四五六"[now.getDay()]}
-        </p>
-        <h1 className="display">{greeting(now.getHours())}，探索者。</h1>
+        <p className="eyebrow">{formatDateHeader(lang, now)}</p>
+        <h1 className="display">{greetingForHour(lang, now.getHours())}</h1>
       </header>
 
       <section className={`journey ${total === 0 && !active ? "is-clear" : ""}`}>
@@ -88,63 +80,65 @@ export function Today() {
         <div className="journey-body">
           {active ? (
             <>
-              <p className="eyebrow eyebrow-light">旅程进行中</p>
+              <p className="eyebrow eyebrow-light">{t.today.inProgress}</p>
               <h2>
-                还剩 <b>{active.steps.length - active.index}</b> 步
+                {t.today.stepsLeft[0]}
+                <b>{active.steps.length - active.index}</b>
+                {t.today.stepsLeft[1]}
               </h2>
-              <p className="journey-lede">进度已保存，随时接着走。</p>
+              <p className="journey-lede">{t.today.savedLede}</p>
             </>
           ) : total > 0 ? (
             <>
-              <p className="eyebrow eyebrow-light">今日旅程</p>
+              <p className="eyebrow eyebrow-light">{t.today.todayJourney}</p>
               <h2>
                 {plan.due.length > 0 && (
                   <>
-                    复习 <b>{plan.due.length}</b>
+                    {t.today.reviewLabel} <b>{plan.due.length}</b>
                   </>
                 )}
                 {plan.due.length > 0 && plan.fresh.length > 0 && <i> · </i>}
                 {plan.fresh.length > 0 && (
                   <>
-                    新词 <b>{plan.fresh.length}</b>
+                    {t.today.newLabel} <b>{plan.fresh.length}</b>
                   </>
                 )}
               </h2>
-              <p className="journey-lede">约 {plan.minutes} 分钟。先温故，再知新。</p>
+              <p className="journey-lede">{t.today.journeyLede(plan.minutes)}</p>
             </>
           ) : (
             <>
-              <p className="eyebrow eyebrow-light">今日已完成</p>
-              <h2>今天的星，都亮了。</h2>
-              <p className="journey-lede">记忆需要一点留白。想多走一段，也可以。</p>
+              <p className="eyebrow eyebrow-light">{t.today.doneEyebrow}</p>
+              <h2>{t.today.doneTitle}</h2>
+              <p className="journey-lede">{t.today.doneLede}</p>
             </>
           )}
           {teaser.length > 0 && (
-            <div className="teaser" aria-label="今天将遇见的新词">
+            <div className="teaser" aria-label={t.today.teaserAria}>
               {teaser.map((w, i) => (
                 <Illustration key={w.id} src={atlas.img(w, "thumb")} word={w.word} topic={w.topic} className={`teaser-${i}`} />
               ))}
-              <span>今天会遇见它们</span>
+              <span>{t.today.teaserLabel}</span>
             </div>
           )}
           <div className="journey-actions">
             {active || total > 0 ? (
               <button className="btn btn-primary btn-xl" onClick={() => start()}>
-                {active ? "继续旅程" : "开始今天的旅程"} <ArrowRight size={20} />
+                {active ? t.today.continueBtn : t.today.startBtn} <ArrowRight size={20} />
               </button>
             ) : (
               <button className="btn btn-primary btn-xl" onClick={() => start({ extra: 5 })}>
-                再认识 5 个新词 <Sparkles size={18} />
+                {t.today.extraBtn} <Sparkles size={18} />
               </button>
             )}
             {!active && plan.due.length > 0 && plan.fresh.length > 0 && (
               <button className="btn btn-glass" onClick={() => start({ reviewOnly: true })}>
-                只复习
+                {t.today.reviewOnlyBtn}
               </button>
             )}
             {!active && total === 0 && (
               <button className="btn btn-glass" onClick={() => go({ page: "practice" })}>
-                <Keyboard size={18} /> 打字练习
+                <Keyboard size={18} /> {t.today.typingBtn}
               </button>
             )}
           </div>
@@ -156,19 +150,19 @@ export function Today() {
 
         <section className="panel streak-panel">
           <div className="panel-head">
-            <h3 className="eyebrow">这一周</h3>
+            <h3 className="eyebrow">{t.today.thisWeek}</h3>
             <span className={`streak ${streak ? "is-on" : ""}`}>
-              <Flame size={16} /> 连续 {streak} 天
+              <Flame size={16} /> {t.today.streakDays(streak)}
             </span>
           </div>
           <div className="streak-body">
             <Ring value={goal ? doneToday / goal : 0} size={112} stroke={8} tone="terra">
               <b>{doneToday}</b>
-              <small>今日答题</small>
+              <small>{t.today.answeredToday}</small>
             </Ring>
             <ol className="week">
               {week.map((d) => (
-                <li key={d.k} className={`${d.v ? "is-on" : ""} ${d.today ? "is-today" : ""}`} title={`${d.k}：${d.v} 题`}>
+                <li key={d.k} className={`${d.v ? "is-on" : ""} ${d.today ? "is-today" : ""}`} title={`${d.k}: ${d.v} ${t.today.questionsUnit}`}>
                   <span style={{ "--h": Math.min(1, d.v / 40) } as React.CSSProperties} />
                   <small>{d.label}</small>
                 </li>
@@ -177,15 +171,15 @@ export function Today() {
           </div>
           <dl className="mini-stats">
             <div>
-              <dt>已点亮</dt>
+              <dt>{t.today.lit}</dt>
               <dd>{learned.toLocaleString()}</dd>
             </div>
             <div>
-              <dt>已掌握</dt>
+              <dt>{t.today.mastered}</dt>
               <dd>{mastered.toLocaleString()}</dd>
             </div>
             <div>
-              <dt>全部词汇</dt>
+              <dt>{t.today.totalWords}</dt>
               <dd>{atlas.count.toLocaleString()}</dd>
             </div>
           </dl>
@@ -202,6 +196,7 @@ export function Today() {
 function GalaxyPanel({ learned, total }: { learned: number; total: number }) {
   const today = useStore((s) => s.progress.days[dayKey()]);
   const ids = useStore((s) => s.progress.cards);
+  const t = useT();
   const todayIds = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -214,13 +209,15 @@ function GalaxyPanel({ learned, total }: { learned: number; total: number }) {
     <section className="galaxy-panel" onClick={() => go({ page: "atlas", view: "galaxy" })} role="link" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && go({ page: "atlas", view: "galaxy" })}>
       <Galaxy mode="mini" highlight={todayIds} />
       <div className="galaxy-panel-copy">
-        <p className="eyebrow eyebrow-light">你的词汇星图</p>
+        <p className="eyebrow eyebrow-light">{t.today.galaxyEyebrow}</p>
         <h3>
-          已点亮 <b>{learned.toLocaleString()}</b> 颗星
+          {t.today.galaxyTitle[0]}
+          <b>{learned.toLocaleString()}</b>
+          {t.today.galaxyTitle[1]}
         </h3>
-        <p>{learned ? `还有 ${(total - learned).toLocaleString()} 颗在等你。金色是今天新点亮的。` : `${total.toLocaleString()} 个词是 ${total.toLocaleString()} 颗星。学会一个，就点亮一颗。`}</p>
+        <p>{learned ? t.today.galaxyDescLit((total - learned).toLocaleString()) : t.today.galaxyDescEmpty(total.toLocaleString())}</p>
         <span className="btn btn-glass">
-          进入星图 <ArrowRight size={18} />
+          {t.today.enterGalaxy} <ArrowRight size={18} />
         </span>
       </div>
     </section>
@@ -229,6 +226,8 @@ function GalaxyPanel({ learned, total }: { learned: number; total: number }) {
 
 function WordOfDay() {
   const atlas = useAtlas();
+  const lang = useLang();
+  const t = useT();
   const pick = useMemo(() => {
     const pool = atlas.words.filter((w) => w.cefr >= 2 && w.media & 1);
     const list = pool.length ? pool : atlas.words;
@@ -236,11 +235,12 @@ function WordOfDay() {
   }, [atlas]);
   const { entry } = useEntry(pick?.id);
   if (!pick) return null;
+  const meaning = lang === "zh" ? pick.zh : entry?.senses[0] ? `${entry.senses[0].pos} ${entry.senses[0].en || entry.senses[0].zh}` : pick.zh;
   return (
-    <section className="panel wotd" onClick={() => openWord(pick.id)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openWord(pick.id)} aria-label={`今日一词：${pick.word}`}>
+    <section className="panel wotd" onClick={() => openWord(pick.id)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openWord(pick.id)} aria-label={`${t.today.wotd}: ${pick.word}`}>
       <Illustration src={atlas.img(pick)} word={pick.word} topic={pick.topic} className="wotd-art" />
       <div className="wotd-body">
-        <h3 className="eyebrow">今日一词</h3>
+        <h3 className="eyebrow">{t.today.wotd}</h3>
         <p className="wotd-word" lang="en">
           {pick.word}
         </p>
@@ -249,7 +249,7 @@ function WordOfDay() {
             <Pronounce entry={entry} refw={pick} />
           </div>
         )}
-        <p className="wotd-zh">{pick.zh}</p>
+        <p className="wotd-zh">{meaning}</p>
         {entry?.ex[0] && (
           <p className="wotd-ex" lang="en">
             <Highlight text={entry.ex[0].en} word={entry.w} />
@@ -264,6 +264,8 @@ function LevelPath() {
   const atlas = useAtlas();
   const cards = useStore((s) => s.progress.cards);
   const start = useStore((s) => s.settings.startLevel);
+  const lang = useLang();
+  const t = useT();
   const levels = useMemo(() => {
     const out = atlas.cefr.map((name) => ({ name, total: 0, seen: 0, mastered: 0 }));
     for (const w of atlas.words) {
@@ -277,13 +279,13 @@ function LevelPath() {
     }
     return out;
   }, [atlas, cards]);
-  const NAMES = ["入门", "基础", "进阶", "中高", "高级", "精通"];
+  const names = LEVEL_NAMES[lang];
   return (
     <section className="panel path-panel">
       <div className="panel-head">
-        <h3 className="eyebrow">学习路线 · 从 A1 到 C2</h3>
+        <h3 className="eyebrow">{t.today.pathTitle}</h3>
         <span className="legend">
-          <i className="lg-seen" /> 已学 <i className="lg-done" /> 已掌握
+          <i className="lg-seen" /> {t.today.legendSeen} <i className="lg-done" /> {t.today.legendDone}
         </span>
       </div>
       <ol className="route">
@@ -292,16 +294,16 @@ function LevelPath() {
           const done = l.mastered / Math.max(1, l.total);
           return (
             <li key={l.name} className={`${i === start ? "is-start" : ""} ${l.seen ? "is-on" : ""}`}>
-              <button onClick={() => go({ page: "atlas", level: l.name })} aria-label={`${l.name} ${NAMES[i]}，已学 ${l.seen} / ${l.total}`}>
+              <button onClick={() => go({ page: "atlas", level: l.name })} aria-label={`${l.name} ${names[i]}, ${l.seen} / ${l.total}`}>
                 <span className="station" style={{ "--seen": seen, "--done": done } as React.CSSProperties}>
                   <b>{l.name}</b>
                 </span>
-                <span className="station-name">{NAMES[i]}</span>
+                <span className="station-name">{names[i]}</span>
                 <span className="station-count">
                   {l.seen}
                   <small>/{l.total}</small>
                 </span>
-                {i === start && <span className="station-flag">起点</span>}
+                {i === start && <span className="station-flag">{t.today.startFlag}</span>}
               </button>
             </li>
           );
@@ -313,6 +315,8 @@ function LevelPath() {
 
 function Topics() {
   const atlas = useAtlas();
+  const lang = useLang();
+  const t = useT();
   const counts = useMemo(() => {
     const c = new Array(atlas.topics.length).fill(0);
     atlas.words.forEach((w) => c[w.topic]++);
@@ -321,9 +325,9 @@ function Topics() {
   return (
     <section className="topics-panel">
       <div className="panel-head">
-        <h3 className="eyebrow">按雅思话题探索</h3>
+        <h3 className="eyebrow">{t.today.exploreTopics}</h3>
         <button className="link" onClick={() => go({ page: "atlas" })}>
-          打开图鉴
+          {t.today.openAtlas}
         </button>
       </div>
       <ul className="topic-tiles">
@@ -332,8 +336,8 @@ function Topics() {
             <button onClick={() => go({ page: "atlas", topic: key })}>
               <img src={`${BRAND}/topic-${key}.webp`} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
               <span>
-                <b>{name}</b>
-                <small>{counts[i]} 个词</small>
+                <b>{topicName(lang, key, name)}</b>
+                <small>{t.today.wordsCount(counts[i])}</small>
               </span>
             </button>
           </li>

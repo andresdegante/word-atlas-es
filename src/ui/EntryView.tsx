@@ -1,9 +1,10 @@
 import { Bookmark, BookmarkCheck, Lightbulb, Share2 } from "lucide-react";
 import type { Entry, WordRef } from "../atlas/types";
 import { useAtlas } from "../atlas/context";
+import { topicName } from "../lib/i18n";
 import { splitHighlight, splitPair } from "../lib/text";
 import { formatInterval, isMastered } from "../store/srs";
-import { toggleBookmark, useStore } from "../store/store";
+import { toggleBookmark, useLang, useStore, useT } from "../store/store";
 import { Illustration } from "./Illustration";
 import { Speak } from "./Speak";
 import { shareWord } from "./share";
@@ -24,10 +25,11 @@ export function Highlight({ text, word }: { text: string; word: string }) {
 export function Pronounce({ entry, refw }: { entry: Entry; refw: WordRef | Entry }) {
   const atlas = useAtlas();
   const accent = useStore((s) => s.settings.accent);
+  const t = useT();
   const both = entry.uk && entry.us && entry.uk !== entry.us;
   const items: ["uk" | "us", string, string][] = both
-    ? [["uk", "英", entry.uk], ["us", "美", entry.us]]
-    : [[accent, accent === "uk" ? "英" : "美", entry.uk || entry.us]];
+    ? [["uk", t.entry.uk, entry.uk], ["us", t.entry.us, entry.us]]
+    : [[accent, accent === "uk" ? t.entry.uk : t.entry.us, entry.uk || entry.us]];
   if (!both && items[0][2] === "") return null;
   return (
     <div className="pron">
@@ -56,7 +58,9 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
   const card = useStore((s) => s.progress.cards[entry.id]);
   const saved = useStore((s) => s.progress.bookmarks.includes(entry.id));
   const accent = useStore((s) => s.settings.accent);
-  const topicIdx = atlas.topics.findIndex((t) => t[0] === entry.topic);
+  const lang = useLang();
+  const t = useT();
+  const topicIdx = atlas.topics.findIndex((tp) => tp[0] === entry.topic);
   const topic = atlas.topics[topicIdx];
   const exUrls = [atlas.audio(entry, "ex"), atlas.audio(entry, "ex2")];
   const famLinks = entry.fam.map((f) => {
@@ -64,26 +68,27 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
     const hit = atlas.words.find((x) => x.word.toLowerCase() === w);
     return { label: f, id: hit?.id };
   });
-  const status = card ? (isMastered(card) ? "已掌握" : "学习中") : null;
+  const mastered = card ? isMastered(card) : false;
+  const status = card ? (mastered ? t.entry.mastered : t.entry.learning) : null;
 
   return (
     <article className={`entry entry-${mode}`}>
       <div className="entry-art">
-        <Illustration src={atlas.img(entry)} word={entry.w} topic={topicIdx} eager={eager} alt={`${entry.w} 插画`} />
+        <Illustration src={atlas.img(entry)} word={entry.w} topic={topicIdx} eager={eager} alt={t.entry.illustrationAlt(entry.w)} />
       </div>
       <div className="entry-body">
         <header className="entry-head">
           <div className="entry-tags">
             <span className={`chip chip-level lv-${entry.cefr}`}>{entry.cefr}</span>
-            {topic && <span className="chip">{topic[1]}</span>}
-            {status && <span className={`chip chip-status ${status === "已掌握" ? "is-done" : ""}`}>{status}</span>}
+            {topic && <span className="chip">{topicName(lang, topic[0], topic[1])}</span>}
+            {status && <span className={`chip chip-status ${mastered ? "is-done" : ""}`}>{status}</span>}
           </div>
           {mode === "detail" && (
             <div className="entry-actions">
-              <button className={`icon-btn ${saved ? "is-on" : ""}`} onClick={() => toggleBookmark(entry.id)} aria-pressed={saved} aria-label={saved ? "取消收藏" : "收藏"} title={saved ? "取消收藏" : "收藏"}>
+              <button className={`icon-btn ${saved ? "is-on" : ""}`} onClick={() => toggleBookmark(entry.id)} aria-pressed={saved} aria-label={saved ? t.entry.unsave : t.entry.save} title={saved ? t.entry.unsave : t.entry.save}>
                 {saved ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
               </button>
-              <button className="icon-btn" onClick={() => shareWord(atlas, entry)} aria-label="生成分享卡片" title="生成分享卡片">
+              <button className="icon-btn" onClick={() => shareWord(atlas, entry)} aria-label={t.entry.share} title={t.entry.share}>
                 <Share2 size={19} />
               </button>
             </div>
@@ -105,10 +110,18 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
           {entry.senses.map((s, i) => (
             <li key={i}>
               <span className="pos">{s.pos}</span>
-              <span className="zh">{s.zh}</span>
-              {s.en && (
-                <span className="en" lang="en">
-                  {s.en}
+              {lang === "zh" ? (
+                <>
+                  <span className="zh">{s.zh}</span>
+                  {s.en && (
+                    <span className="en" lang="en">
+                      {s.en}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="zh" lang="en">
+                  {s.en || s.zh}
                 </span>
               )}
             </li>
@@ -117,16 +130,16 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
 
         {entry.ex.length > 0 && (
           <section className="block">
-            <h3 className="eyebrow">例句</h3>
+            <h3 className="eyebrow">{t.entry.examples}</h3>
             <ul className="examples">
               {entry.ex.map((x, i) => (
                 <li key={i}>
-                  {entry.ex.length > 1 && <span className={`ex-tag ${i ? "is-ielts" : ""}`}>{i ? "雅思语境" : "日常"}</span>}
+                  {entry.ex.length > 1 && <span className={`ex-tag ${i ? "is-ielts" : ""}`}>{i ? t.entry.ieltsCtx : t.entry.dailyCtx}</span>}
                   <p className="ex-en" lang="en">
                     <Highlight text={x.en} word={entry.w} />
                     <Speak url={exUrls[i] ?? null} text={x.en} accent={i === 1 && exUrls[1] ? "us" : accent} size="sm" className="ex-speak" />
                   </p>
-                  <p className="ex-zh">{x.zh}</p>
+                  {lang === "zh" && <p className="ex-zh">{x.zh}</p>}
                 </li>
               ))}
             </ul>
@@ -135,14 +148,14 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
 
         {entry.col.length > 0 && (
           <section className="block">
-            <h3 className="eyebrow">常用搭配</h3>
+            <h3 className="eyebrow">{t.entry.collocations}</h3>
             <ul className="collocations">
               {entry.col.map((c) => {
                 const { en, zh } = splitPair(c);
                 return (
                   <li key={c}>
                     <span lang="en">{en}</span>
-                    {zh && <small>{zh}</small>}
+                    {lang === "zh" && zh && <small>{zh}</small>}
                   </li>
                 );
               })}
@@ -154,7 +167,7 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
           <section className="block relations">
             {famLinks.length > 0 && (
               <div>
-                <h3 className="eyebrow">词族</h3>
+                <h3 className="eyebrow">{t.entry.wordFamily}</h3>
                 <p>
                   {famLinks.map((f) =>
                     f.id && mode === "detail" ? (
@@ -170,31 +183,36 @@ export function EntryView({ entry, mode = "detail", eager = true }: { entry: Ent
             )}
             {entry.syn.length > 0 && (
               <div>
-                <h3 className="eyebrow">近义</h3>
+                <h3 className="eyebrow">{t.entry.synonyms}</h3>
                 <p>{entry.syn.map((s) => <span key={s}>{s}</span>)}</p>
               </div>
             )}
             {entry.ant.length > 0 && (
               <div>
-                <h3 className="eyebrow">反义</h3>
+                <h3 className="eyebrow">{t.entry.antonyms}</h3>
                 <p>{entry.ant.map((s) => <span key={s}>{s}</span>)}</p>
               </div>
             )}
           </section>
         )}
 
-        {entry.tip && (
+        {lang === "zh" && entry.tip && (
           <aside className="tip">
             <Lightbulb size={17} strokeWidth={1.8} />
             <p>{entry.tip}</p>
           </aside>
         )}
 
-        {entry.note && <p className="usage-note">用法提醒：{entry.note}</p>}
+        {entry.note && (
+          <p className="usage-note">
+            {t.entry.usageNote}
+            {entry.note}
+          </p>
+        )}
 
         {mode === "detail" && card && (
           <p className="memory-note">
-            {card.due <= Date.now() ? "现在可以复习" : `下次复习 ${formatInterval(card.due - Date.now())}后`} · 记忆稳定度 {card.s < 1 ? "<1" : Math.round(card.s)} 天 · 已复习 {card.reps} 次
+            {card.due <= Date.now() ? t.entry.reviewNow : t.entry.nextReview(formatInterval(card.due - Date.now(), lang))} · {t.entry.stability(card.s < 1 ? "<1" : String(Math.round(card.s)))} · {t.entry.reps(card.reps)}
           </p>
         )}
       </div>

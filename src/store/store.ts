@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Accent } from "../atlas/types";
+import { UI, type Lang } from "../lib/i18n";
 import type { CardState, Grade } from "./srs";
 
 export type QuizKind = "meaning" | "picture" | "listen" | "spell";
@@ -47,6 +48,7 @@ export interface Progress {
 }
 
 export interface Settings {
+  lang: Lang;
   accent: Accent;
   autoplay: boolean;
   dailyNew: number;
@@ -63,6 +65,7 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
+  lang: "es",
   accent: "uk",
   autoplay: true,
   dailyNew: 10,
@@ -160,6 +163,7 @@ export function sanitizeProgress(v: unknown, datasetId: string): Progress {
 export function sanitizeSettings(v: unknown): Settings {
   const s = { ...defaultSettings };
   if (!isObj(v)) return s;
+  if (v.lang === "es" || v.lang === "en" || v.lang === "zh") s.lang = v.lang;
   if (v.accent === "uk" || v.accent === "us") s.accent = v.accent;
   if (typeof v.autoplay === "boolean") s.autoplay = v.autoplay;
   if (num(v.dailyNew, 0, 100)) s.dailyNew = Math.round(v.dailyNew as number);
@@ -262,6 +266,15 @@ export const store = {
 
 export function useStore<T>(select: (s: State) => T): T {
   return useSyncExternalStore(store.subscribe, () => select(state), () => select(state));
+}
+
+export function useLang(): Lang {
+  return useStore((s) => s.settings.lang);
+}
+
+export function useT() {
+  const lang = useLang();
+  return UI[lang];
 }
 
 export function bumpDay(p: Progress, patch: Partial<DayStat>): Progress {

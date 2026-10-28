@@ -2,10 +2,11 @@ import { Crosshair, Minus, Plus, RotateCcw, Share2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtlas } from "../atlas/context";
 import type { WordRef } from "../atlas/types";
+import { topicName } from "../lib/i18n";
 import { openWord } from "../lib/router";
 import { cue, playFile } from "../lib/sound";
 import { isMastered } from "../store/srs";
-import { store, useStore } from "../store/store";
+import { store, useLang, useStore, useT } from "../store/store";
 import { Illustration } from "../ui/Illustration";
 import { detectQuality, GalaxyEngine } from "./engine";
 import { layoutGalaxy, TOPIC_COLORS, type GalaxyLayout } from "./layout";
@@ -58,6 +59,8 @@ export function Galaxy({
   const atlas = useAtlas();
   const layout = useGalaxyLayout();
   const cards = useStore((s) => s.progress.cards);
+  const lang = useLang();
+  const t = useT();
   const canvas = useRef<HTMLCanvasElement>(null);
   const engine = useRef<GalaxyEngine | null>(null);
   const labels = useRef<HTMLDivElement>(null);
@@ -293,7 +296,7 @@ export function Galaxy({
         }}
         onWheel={onWheel}
         role="img"
-        aria-label={`词汇星图：${layout.n} 颗星，已点亮 ${lit} 颗。可拖动旋转、滚动缩放，点击星星打开词条。`}
+        aria-label={t.galaxy.aria(layout.n, lit)}
         tabIndex={0}
         onKeyDown={(e) => {
           const eng = engine.current;
@@ -307,9 +310,9 @@ export function Galaxy({
         }}
       />
       <div className="galaxy-labels" ref={labels} aria-hidden="true">
-        {atlas.topics.map(([key, name], t) => (
-          <span key={key} style={{ "--c": TOPIC_COLORS[t % TOPIC_COLORS.length] } as React.CSSProperties}>
-            {name}
+        {atlas.topics.map(([key, name], idx) => (
+          <span key={key} style={{ "--c": TOPIC_COLORS[idx % TOPIC_COLORS.length] } as React.CSSProperties}>
+            {topicName(lang, key, name)}
           </span>
         ))}
       </div>
@@ -322,34 +325,34 @@ export function Galaxy({
           <Illustration src={atlas.img(hover.ref, "thumb")} word={hover.ref.word} topic={hover.ref.topic} />
           <span>
             <b lang="en">{hover.ref.word}</b>
-            <small>{hover.ref.zh}</small>
+            <small>{lang === "zh" ? hover.ref.zh : atlas.peek(hover.ref.id)?.senses[0]?.en ?? hover.ref.ipa}</small>
           </span>
         </button>
       )}
       <div className="galaxy-hud">
         <p>
-          <b>{lit.toLocaleString()}</b> / {layout.n.toLocaleString()} 颗星已点亮
+          <b>{lit.toLocaleString()}</b> / {layout.n.toLocaleString()} {t.galaxy.hudLitSuffix}
         </p>
         <ul className="galaxy-legend" aria-hidden="true">
           <li>
             <i className="lg-dust" />
-            未学
+            {t.galaxy.unlearned}
           </li>
           <li>
             <i className="lg-learning" />
-            学习中
+            {t.galaxy.learning}
           </li>
           <li>
             <i className="lg-mastered" />
-            已掌握
+            {t.galaxy.mastered}
           </li>
         </ul>
       </div>
       <div className="galaxy-controls">
-        <button className="icon-btn" onClick={() => engine.current && (engine.current.cam.dist = clampDist(engine.current.cam.dist * 0.8))} aria-label="放大">
+        <button className="icon-btn" onClick={() => engine.current && (engine.current.cam.dist = clampDist(engine.current.cam.dist * 0.8))} aria-label={t.galaxy.zoomIn}>
           <Plus size={18} />
         </button>
-        <button className="icon-btn" onClick={() => engine.current && (engine.current.cam.dist = clampDist(engine.current.cam.dist * 1.25))} aria-label="缩小">
+        <button className="icon-btn" onClick={() => engine.current && (engine.current.cam.dist = clampDist(engine.current.cam.dist * 1.25))} aria-label={t.galaxy.zoomOut}>
           <Minus size={18} />
         </button>
         <button
@@ -359,7 +362,7 @@ export function Galaxy({
             engine.current?.replayIntro();
             if (store.get().settings.sfx) void cue("fly");
           }}
-          aria-label="回到全景"
+          aria-label={t.galaxy.reset}
         >
           <RotateCcw size={17} />
         </button>
@@ -374,15 +377,15 @@ export function Galaxy({
               if (store.get().settings.sfx) void cue("fly");
             }
           }}
-          aria-label="飞到一颗已点亮的星"
+          aria-label={t.galaxy.flyRandom}
         >
           <Crosshair size={17} />
         </button>
-        <button className="icon-btn" onClick={() => canvas.current && shareGalaxy(canvas.current, lit, layout.n)} aria-label="分享我的星图">
+        <button className="icon-btn" onClick={() => canvas.current && shareGalaxy(canvas.current, lit, layout.n)} aria-label={t.galaxy.share}>
           <Share2 size={17} />
         </button>
       </div>
-      <p className="galaxy-hint">拖动旋转 · 滚动缩放 · 点击星星打开词条</p>
+      <p className="galaxy-hint">{t.galaxy.hint}</p>
     </div>
   );
 }

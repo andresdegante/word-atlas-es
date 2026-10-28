@@ -1,6 +1,7 @@
 import { Volume2 } from "lucide-react";
 import { useState } from "react";
 import { play } from "../lib/audio";
+import { useT } from "../store/store";
 
 export function Speak({
   url,
@@ -22,6 +23,7 @@ export function Speak({
   kbd?: string;
 }) {
   const [on, setOn] = useState(false);
+  const t = useT();
   const run = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setOn(true);
@@ -36,8 +38,8 @@ export function Speak({
       type="button"
       className={`speak speak-${size} ${on ? "is-on" : ""} ${label ? "has-label" : ""} ${className}`}
       onClick={run}
-      aria-label={typeof label === "string" ? `朗读 ${label}` : `朗读 ${text}`}
-      title={kbd ? `朗读（${kbd}）` : "朗读"}
+      aria-label={typeof label === "string" ? t.speak.readAria(label) : t.speak.readAria(text)}
+      title={kbd ? `${t.speak.title} (${kbd})` : t.speak.title}
     >
       <span className="speak-icon">
         <Volume2 size={size === "lg" ? 22 : size === "sm" ? 15 : 18} strokeWidth={1.8} />

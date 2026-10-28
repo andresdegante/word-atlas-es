@@ -6,32 +6,33 @@ import { play, stopAudio } from "../lib/audio";
 import { cue } from "../lib/sound";
 import { hashSeed, shuffle } from "../lib/text";
 import { clean, correctCharacterCount, same, typingDelta, typingMetrics } from "../lib/typing";
-import { store, useStore } from "../store/store";
+import { store, useLang, useStore, useT } from "../store/store";
 import { AmbiencePicker } from "../ui/Ambience";
 import { Illustration } from "../ui/Illustration";
 
 type Mode = "word" | "sentence" | "dictation";
 type Source = "recent" | "mistakes" | "saved" | "path";
 
-const MODES: [Mode, string, string, typeof Type][] = [
-  ["word", "单词", "看图写出单词", Type],
-  ["sentence", "例句", "照着抄写，练出手感", Keyboard],
-  ["dictation", "听写", "只听声音，写下整句", Headphones],
-];
-const SOURCES: [Source, string][] = [
-  ["recent", "最近学过"],
-  ["mistakes", "错词本"],
-  ["saved", "收藏"],
-  ["path", "学习路线"],
-];
-
 export function Practice() {
   const atlas = useAtlas();
   const progress = useStore((s) => s.progress);
   const startLevel = useStore((s) => s.settings.startLevel);
+  const t = useT();
   const [mode, setMode] = useState<Mode>("word");
   const [source, setSource] = useState<Source>(() => (Object.keys(progress.cards).length ? "recent" : "path"));
   const [round, setRound] = useState<{ entries: Entry[]; key: number } | null>(null);
+
+  const modes: [Mode, string, string, typeof Type][] = [
+    ["word", t.practice.modes.word[0], t.practice.modes.word[1], Type],
+    ["sentence", t.practice.modes.sentence[0], t.practice.modes.sentence[1], Keyboard],
+    ["dictation", t.practice.modes.dictation[0], t.practice.modes.dictation[1], Headphones],
+  ];
+  const sources: [Source, string][] = [
+    ["recent", t.practice.sources.recent],
+    ["mistakes", t.practice.sources.mistakes],
+    ["saved", t.practice.sources.saved],
+    ["path", t.practice.sources.path],
+  ];
 
   const pool = useMemo(() => {
     const learned = Object.entries(progress.cards)
@@ -50,19 +51,19 @@ export function Practice() {
 
   if (round) return <TypingRound key={round.key} mode={mode} entries={round.entries} onExit={() => setRound(null)} onAgain={start} />;
 
-  const best = progress.typing.filter((t) => t.mode === mode).reduce((m, t) => Math.max(m, t.wpm), 0);
+  const best = progress.typing.filter((x) => x.mode === mode).reduce((m, x) => Math.max(m, x.wpm), 0);
   return (
     <div className="page practice">
       <header className="page-head">
-        <p className="eyebrow">练习 · Typing Studio</p>
-        <h1 className="display">让手，也记住它们。</h1>
-        <p className="lede">打字只练拼写和手感，不会改动记忆进度。</p>
+        <p className="eyebrow">{t.practice.eyebrow}</p>
+        <h1 className="display">{t.practice.title}</h1>
+        <p className="lede">{t.practice.lede}</p>
       </header>
       <div className="practice-grid">
         <section className="panel">
-          <h3 className="eyebrow">模式</h3>
+          <h3 className="eyebrow">{t.practice.modeHeader}</h3>
           <div className="mode-cards">
-            {MODES.map(([k, name, desc, Icon]) => (
+            {modes.map(([k, name, desc, Icon]) => (
               <button key={k} className={`mode-card ${mode === k ? "is-on" : ""}`} onClick={() => setMode(k)} aria-pressed={mode === k}>
                 <Icon size={22} strokeWidth={1.7} />
                 <b>{name}</b>
@@ -70,9 +71,9 @@ export function Practice() {
               </button>
             ))}
           </div>
-          <h3 className="eyebrow">词来自</h3>
+          <h3 className="eyebrow">{t.practice.sourceHeader}</h3>
           <div className="segmented segmented-wide">
-            {SOURCES.map(([k, label]) => (
+            {sources.map(([k, label]) => (
               <button key={k} className={source === k ? "is-on" : ""} onClick={() => setSource(k)} aria-pressed={source === k}>
                 {label}
               </button>
@@ -81,30 +82,30 @@ export function Practice() {
           <p className="muted">
             {pool.length
               ? source === "path"
-                ? "从学习路线的前 400 个词里随机抽 10 个。"
-                : `可练 ${pool.length} 个词，每轮随机 10 个。`
-              : "这里还没有词，先去学几个，或换个来源。"}
+                ? t.practice.poolPathHint
+                : t.practice.poolCountHint(pool.length)
+              : t.practice.poolEmptyHint}
           </p>
           <button className="btn btn-primary btn-xl" onClick={start} disabled={!pool.length}>
-            开始一轮
+            {t.practice.startRound}
           </button>
         </section>
         <section className="panel practice-side">
           <img src={`${import.meta.env.BASE_URL}brand/${mode === "dictation" ? "listen" : "typing"}.webp`} alt="" />
           <dl className="mini-stats">
             <div>
-              <dt>最佳速度</dt>
+              <dt>{t.practice.bestSpeed}</dt>
               <dd>
                 {best}
                 <small>WPM</small>
               </dd>
             </div>
             <div>
-              <dt>完成轮次</dt>
+              <dt>{t.practice.roundsDone}</dt>
               <dd>{progress.typing.length}</dd>
             </div>
           </dl>
-          <p className="muted">WPM 按标准每 5 个字符计 1 词，只统计正确输入。</p>
+          <p className="muted">{t.practice.wpmNote}</p>
         </section>
       </div>
     </div>
@@ -114,9 +115,10 @@ export function Practice() {
 function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: Entry[]; onExit: () => void; onAgain: () => void }) {
   const atlas = useAtlas();
   const settings = useStore((s) => s.settings);
+  const lang = useLang();
+  const t = useT();
   const [i, setI] = useState(0);
   const [value, setValue] = useState("");
-  // Running totals live in a ref so every keystroke is counted exactly once.
   const totalsRef = useRef({ typed: 0, correct: 0, accepted: 0, ms: 0 });
   const [totals, setTotals] = useState(totalsRef.current);
   const [done, setDone] = useState(false);
@@ -139,8 +141,8 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
     if (started.current === null && next) started.current = performance.now();
     const d = typingDelta(value, next, target);
     if (settings.sfx && d.total > 0) void cue("key");
-    const t = totalsRef.current;
-    totalsRef.current = { ...t, typed: t.typed + d.total, correct: t.correct + d.correct };
+    const cur = totalsRef.current;
+    totalsRef.current = { ...cur, typed: cur.typed + d.total, correct: cur.correct + d.correct };
     setTotals(totalsRef.current);
     setValue(next);
     if (clean(next).length >= clean(target).length && same(next.trimEnd(), target)) finishItem(next);
@@ -150,8 +152,8 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
     const ms = started.current ? performance.now() - started.current : 0;
     const accepted = correctCharacterCount(final, target);
     if (settings.sfx) void cue("correct");
-    const t = totalsRef.current;
-    const nt = { ...t, accepted: t.accepted + accepted, ms: t.ms + ms };
+    const cur = totalsRef.current;
+    const nt = { ...cur, accepted: cur.accepted + accepted, ms: cur.ms + ms };
     totalsRef.current = nt;
     setTotals(nt);
     if (i + 1 >= entries.length) {
@@ -164,22 +166,23 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
   const m = typingMetrics(totals.correct, totals.typed, totals.accepted, totals.ms);
   const chars = Array.from(target);
   const typed = Array.from(value);
+  const meaning = lang === "zh" ? e.senses[0].zh : e.senses[0].en || e.senses[0].zh;
 
   if (done)
     return (
       <div className="page practice">
         <section className="panel typing-done">
-          <p className="eyebrow">本轮完成</p>
+          <p className="eyebrow">{t.practice.roundDone}</p>
           <h1 className="display">
             {m.wpm} <small>WPM</small>
           </h1>
-          <p className="lede">准确率 {m.accuracy}% · {entries.length} 项</p>
+          <p className="lede">{t.practice.accuracyLine(m.accuracy, entries.length)}</p>
           <div className="summary-actions">
             <button className="btn btn-ghost" onClick={onExit}>
-              返回
+              {t.practice.backBtn}
             </button>
             <button className="btn btn-primary btn-xl" onClick={onAgain} autoFocus>
-              <RotateCcw size={18} /> 再来一轮
+              <RotateCcw size={18} /> {t.practice.againBtn}
             </button>
           </div>
         </section>
@@ -190,7 +193,7 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
     <div className="page practice typing">
       <header className="typing-top">
         <button className="btn btn-ghost" onClick={onExit}>
-          结束
+          {t.practice.endBtn}
         </button>
         <AmbiencePicker />
         <div className="learn-progress">
@@ -205,7 +208,7 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
           <div className="typing-cue">
             <Illustration src={atlas.img(e)} word={e.w} topic={0} eager />
             <p>
-              <span className="pos">{e.senses[0].pos}</span> {e.senses[0].zh}
+              <span className="pos">{e.senses[0].pos}</span> {meaning}
             </p>
           </div>
         )}
@@ -213,17 +216,17 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
           <p className="typing-zh">
             {mode === "dictation" && (
               <button className="link" onClick={() => play(atlas.audio(e, "ex"), e.ex[0].en, settings.accent)}>
-                再听一遍
+                {t.practice.listenAgain}
               </button>
             )}
-            {e.ex[0].zh}
+            {lang === "zh" ? e.ex[0].zh : `${e.w}: ${meaning}`}
           </p>
         )}
         <p className={`typing-text ${mode === "word" ? "is-word" : ""} ${mode === "dictation" ? "is-hidden" : ""}`} lang="en" aria-hidden="true">
           {chars.map((ch, k) => {
-            const t = typed[k];
-            const cls = t === undefined ? (k === typed.length ? "is-caret" : "") : same(t, ch) ? "is-ok" : "is-bad";
-            const show = mode === "dictation" && t === undefined ? (ch === " " ? " " : /[A-Za-z]/.test(ch) ? "·" : ch) : ch;
+            const chTyped = typed[k];
+            const cls = chTyped === undefined ? (k === typed.length ? "is-caret" : "") : same(chTyped, ch) ? "is-ok" : "is-bad";
+            const show = mode === "dictation" && chTyped === undefined ? (ch === " " ? " " : /[A-Za-z]/.test(ch) ? "·" : ch) : ch;
             return (
               <span key={k} className={cls}>
                 {show}
@@ -241,10 +244,10 @@ function TypingRound({ mode, entries, onExit, onAgain }: { mode: Mode; entries: 
           autoCorrect="off"
           autoComplete="off"
           spellCheck={false}
-          aria-label="在这里输入"
+          aria-label={t.practice.inputAria}
         />
         <p className="muted typing-help">
-          {mode === "dictation" ? "听不清可以点「再听一遍」。" : "直接开始输入，全部正确后自动进入下一项。"} 第 {i + 1}/{entries.length} 项
+          {mode === "dictation" ? t.practice.dictationHelp : t.practice.typingHelp} {t.practice.itemCount(i + 1, entries.length)}
         </p>
       </section>
     </div>

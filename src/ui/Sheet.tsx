@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useT } from "../store/store";
 
 /** Accessible dialog: centered panel on desktop, bottom sheet on phones. */
 export function Sheet({
@@ -18,6 +19,7 @@ export function Sheet({
   className?: string;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
@@ -54,7 +56,7 @@ export function Sheet({
     <div className="sheet-root" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={panel} className={`sheet ${wide ? "sheet-wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}>
         <span className="sheet-grip" aria-hidden="true" />
-        <button className="icon-btn sheet-close" onClick={onClose} aria-label="关闭">
+        <button className="icon-btn sheet-close" onClick={onClose} aria-label={t.sheet.close}>
           <X size={20} />
         </button>
         {children}

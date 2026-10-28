@@ -2,7 +2,9 @@ import { CornerDownLeft, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Atlas, WordRef } from "../atlas/types";
 import { useAtlas } from "../atlas/context";
+import { topicName } from "../lib/i18n";
 import { openWord } from "../lib/router";
+import { useLang, useT } from "../store/store";
 import { Illustration } from "./Illustration";
 
 export function searchAtlas(atlas: Atlas, raw: string, limit = 40): WordRef[] {
@@ -20,6 +22,10 @@ export function searchAtlas(atlas: Atlas, raw: string, limit = 40): WordRef[] {
       if (word === q) score = 1000;
       else if (word.startsWith(q)) score = 500 - word.length;
       else if (word.includes(q)) score = 200 - word.indexOf(q) - word.length;
+      else {
+        const peeked = atlas.peek(w.id);
+        if (peeked?.senses[0]?.en.toLowerCase().includes(q)) score = 90;
+      }
     }
     if (score > 0) hits.push([score, w]);
   }
@@ -29,6 +35,8 @@ export function searchAtlas(atlas: Atlas, raw: string, limit = 40): WordRef[] {
 
 export function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const atlas = useAtlas();
+  const lang = useLang();
+  const t = useT();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -48,13 +56,13 @@ export function Palette({ open, onClose }: { open: boolean; onClose: () => void 
   };
   return (
     <div className="palette-root" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="搜索单词">
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t.palette.dialogAria}>
         <label className="palette-input">
           <Search size={20} />
           <input
             ref={input}
             value={q}
-            placeholder="搜索英文或中文，例如 serendipity / 环境"
+            placeholder={t.palette.placeholder}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
@@ -76,29 +84,35 @@ export function Palette({ open, onClose }: { open: boolean; onClose: () => void 
           <kbd>Esc</kbd>
         </label>
         <ul id="palette-list" className="palette-list" role="listbox">
-          {results.map((w, i) => (
-            <li
-              key={w.id}
-              id={`pal-${w.id}`}
-              role="option"
-              aria-selected={i === sel}
-              className={i === sel ? "is-sel" : ""}
-              onMouseEnter={() => setSel(i)}
-              onClick={() => pick(w)}
-            >
-              <Illustration src={atlas.img(w, "thumb")} word={w.word} topic={w.topic} className="palette-thumb" />
-              <span className="palette-word" lang="en">
-                {w.word}
-              </span>
-              <span className="palette-zh">{w.zh}</span>
-              {i === sel && <CornerDownLeft size={15} className="palette-enter" />}
-            </li>
-          ))}
-          {q && !results.length && <li className="palette-empty">没有找到「{q}」</li>}
+          {results.map((w, i) => {
+            const peeked = atlas.peek(w.id);
+            const topic = atlas.topics[w.topic];
+            const sub = lang === "zh" ? w.zh : peeked?.senses[0]?.en ? `${peeked.senses[0].pos} ${peeked.senses[0].en}` : `${w.ipa} · ${topic ? topicName(lang, topic[0], topic[1]) : ""}`;
+            return (
+              <li
+                key={w.id}
+                id={`pal-${w.id}`}
+                role="option"
+                aria-selected={i === sel}
+                className={i === sel ? "is-sel" : ""}
+                onMouseEnter={() => setSel(i)}
+                onClick={() => pick(w)}
+              >
+                <Illustration src={atlas.img(w, "thumb")} word={w.word} topic={w.topic} className="palette-thumb" />
+                <span className="palette-word" lang="en">
+                  {w.word}
+                </span>
+                <span className="palette-zh">{sub}</span>
+                {i === sel && <CornerDownLeft size={15} className="palette-enter" />}
+              </li>
+            );
+          })}
+          {q && !results.length && <li className="palette-empty">{t.palette.empty(q)}</li>}
           {!q && (
             <li className="palette-hint">
-              {atlas.count.toLocaleString()} 个词条 · 支持英文前缀与中文释义搜索 · <kbd>↑</kbd>
-              <kbd>↓</kbd> 选择 <kbd>↵</kbd> 打开
+              {t.palette.hint(atlas.count.toLocaleString())}
+              <kbd>↑</kbd>
+              <kbd>↓</kbd> {t.palette.selectKey} <kbd>↵</kbd> {t.palette.openKey}
             </li>
           )}
         </ul>

@@ -1,7 +1,8 @@
 import { AudioLines, Check, CloudRain, Coffee, Flame, Sailboat, Sparkles, Trees, VolumeX, Waves } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AMBIENCE_LABELS } from "../lib/i18n";
 import { AMBIENCE, primeCues, setAmbience, type AmbienceId } from "../lib/sound";
-import { store, useStore } from "../store/store";
+import { store, useLang, useStore, useT } from "../store/store";
 
 const ICONS: Record<AmbienceId, typeof CloudRain> = { stars: Sparkles, rain: CloudRain, sea: Waves, forest: Trees, fire: Flame, voyage: Sailboat, cafe: Coffee };
 
@@ -32,6 +33,8 @@ export function AmbiencePicker() {
   const [open, setOpen] = useState(false);
   const ambience = useStore((s) => s.settings.ambience);
   const volume = useStore((s) => s.settings.ambienceVolume);
+  const lang = useLang();
+  const t = useT();
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -46,24 +49,25 @@ export function AmbiencePicker() {
     };
   }, [open]);
   const on = ambience !== "off";
+  const labels = AMBIENCE_LABELS[lang];
   return (
     <div className="amb" ref={box}>
-      <button className={`icon-btn amb-btn ${on ? "is-on" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="环境声" title="环境声">
+      <button className={`icon-btn amb-btn ${on ? "is-on" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={t.ambience.buttonAria} title={t.ambience.buttonAria}>
         <AudioLines size={19} />
         {on && <span className="amb-bars" aria-hidden="true"><i /><i /><i /></span>}
       </button>
       {open && (
-        <div className="amb-pop" role="dialog" aria-label="环境声">
-          <p className="eyebrow">环境声 · 专注陪伴</p>
+        <div className="amb-pop" role="dialog" aria-label={t.ambience.buttonAria}>
+          <p className="eyebrow">{t.ambience.eyebrow}</p>
           <ul>
-            {AMBIENCE.map(({ id, label }) => {
+            {AMBIENCE.map(({ id }) => {
               const Icon = ICONS[id];
               const sel = ambience === id;
               return (
                 <li key={id}>
                   <button className={sel ? "is-on" : ""} onClick={() => store.settings({ ambience: sel ? "off" : id })} aria-pressed={sel}>
                     <Icon size={18} strokeWidth={1.7} />
-                    <span>{label}</span>
+                    <span>{labels[id]}</span>
                     {sel && <Check size={16} />}
                   </button>
                 </li>
@@ -72,16 +76,16 @@ export function AmbiencePicker() {
             <li>
               <button className={!on ? "is-on" : ""} onClick={() => store.settings({ ambience: "off" })} aria-pressed={!on}>
                 <VolumeX size={18} strokeWidth={1.7} />
-                <span>安静</span>
+                <span>{labels.off}</span>
                 {!on && <Check size={16} />}
               </button>
             </li>
           </ul>
           <label className="amb-vol">
-            <span>音量</span>
+            <span>{t.ambience.volume}</span>
             <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => store.settings({ ambienceVolume: Number(e.target.value) })} disabled={!on} />
           </label>
-          <p className="amb-note">读单词时会自动压低环境声。</p>
+          <p className="amb-note">{t.ambience.note}</p>
         </div>
       )}
     </div>

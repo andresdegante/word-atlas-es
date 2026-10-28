@@ -1,3 +1,5 @@
+import { useLang } from "../store/store";
+
 export function Mark({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="mark">
@@ -14,12 +16,19 @@ export function Mark({ size = 28 }: { size?: number }) {
 }
 
 export function Logo({ compact = false }: { compact?: boolean }) {
+  const lang = useLang();
   return (
     <span className="logo">
       <Mark />
       <span className="logo-text">
-        <b>词光</b>
-        {!compact && <small>Word Atlas</small>}
+        {lang === "zh" ? (
+          <>
+            <b>词光</b>
+            {!compact && <small>Word Atlas</small>}
+          </>
+        ) : (
+          <b>Word Atlas</b>
+        )}
       </span>
     </span>
   );

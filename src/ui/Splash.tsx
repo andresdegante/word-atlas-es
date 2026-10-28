@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { duck, playFile, preloadFiles } from "../lib/sound";
-import { dayKey, store } from "../store/store";
+import { dayKey, store, useLang, useT } from "../store/store";
 
 const SEEN_KEY = "word-atlas:splash";
 const PALETTE: [string, number][] = [
@@ -95,6 +95,8 @@ export function Splash({ onDone }: { onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<"gather" | "ready" | "open">("gather");
   const opening = useRef(false);
+  const lang = useLang();
+  const t = useT();
   const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   useEffect(() => {
@@ -237,22 +239,22 @@ export function Splash({ onDone }: { onDone: () => void }) {
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={`splash is-${phase} ${reduce ? "is-reduced" : ""}`} onClick={() => open()} role="dialog" aria-label="欢迎打开雅思大门，点击进入">
+    <div className={`splash is-${phase} ${reduce ? "is-reduced" : ""}`} onClick={() => open()} role="dialog" aria-label={t.splash.aria}>
       <div className="door door-l" />
       <div className="door door-r" />
       <div className="splash-light" />
       <canvas ref={canvas} className="splash-canvas" aria-hidden="true" />
       {reduce && (
         <div className="splash-static">
-          <b>词光</b>
+          <b>{lang === "zh" ? "词光" : "Word Atlas"}</b>
           <small>WORD ATLAS</small>
         </div>
       )}
       <div className="splash-copy">
-        <p className="splash-tag">欢迎打开雅思大门</p>
+        <p className="splash-tag">{t.splash.tag}</p>
         <p className="splash-hint">
           <span className="splash-key" />
-          点击开启 · 按任意键
+          {t.splash.hint}
         </p>
       </div>
       <button
@@ -262,7 +264,7 @@ export function Splash({ onDone }: { onDone: () => void }) {
           open(false);
         }}
       >
-        跳过
+        {t.splash.skip}
       </button>
     </div>
   );

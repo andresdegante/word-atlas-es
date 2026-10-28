@@ -9,7 +9,7 @@ import { go } from "../lib/router";
 import { gap, normalize } from "../lib/text";
 import { answer, advance, buildSession, gradeFor, sessionStats } from "../store/session";
 import { Rating } from "../store/srs";
-import { store, useStore, type ActiveSession, type QuizKind, type Step } from "../store/store";
+import { store, useLang, useStore, useT, type ActiveSession, type QuizKind, type Step } from "../store/store";
 import { EntryView, Highlight } from "../ui/EntryView";
 import { Illustration } from "../ui/Illustration";
 import { Galaxy } from "../galaxy/Galaxy";
@@ -35,12 +35,19 @@ export function Learn() {
     }
   }, [atlas]);
 
-  const ids = useMemo(() => [...new Set(session?.steps.map((s) => s.id) ?? [])], [session?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ids = useMemo(() => {
+    const all: string[] = [];
+    for (const s of session?.steps ?? []) {
+      all.push(s.id);
+      if ("options" in s && s.options) all.push(...s.options);
+    }
+    return [...new Set(all)];
+  }, [session?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!ids.length) return;
     let live = true;
-    // Load the first chunk before rendering, the rest in the background.
-    prefetch(atlas, ids.slice(0, 6)).then(() => live && setReady(true));
+    prefetch(atlas, ids.slice(0, 24)).then(() => live && setReady(true));
     void prefetch(atlas, ids);
     return () => {
       live = false;
@@ -55,6 +62,7 @@ export function Learn() {
 }
 
 function Runner({ session }: { session: ActiveSession }) {
+  const t = useT();
   const step = session.steps[session.index];
   const total = session.steps.length;
   const exit = () => {
@@ -64,7 +72,7 @@ function Runner({ session }: { session: ActiveSession }) {
   return (
     <div className="learn">
       <header className="learn-top">
-        <button className="icon-btn" onClick={exit} aria-label="暂停并返回">
+        <button className="icon-btn" onClick={exit} aria-label={t.learn.pauseExit}>
           <X size={22} />
         </button>
         <div className="learn-progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={session.index}>
@@ -92,6 +100,7 @@ function Intro({ step }: { step: Step }) {
   const atlas = useAtlas();
   const { entry } = useEntry(step.id);
   const settings = useStore((s) => s.settings);
+  const t = useT();
   const elapsed = useStepTimer();
   useEffect(() => {
     if (entry && settings.autoplay) void play(atlas.audio(entry, settings.accent), entry.w, settings.accent);
@@ -106,37 +115,39 @@ function Intro({ step }: { step: Step }) {
   return (
     <div className="intro">
       <p className="stage-label">
-        <span className="dot dot-new" /> 初次见面
+        <span className="dot dot-new" /> {t.learn.firstMeet}
       </p>
       <EntryView entry={entry} mode="intro" />
       <footer className="learn-actions">
         <button className="btn btn-primary btn-xl" onClick={next} autoFocus>
-          认识了 <ArrowRight size={20} />
+          {t.learn.gotIt} <ArrowRight size={20} />
         </button>
         <span className="hint-keys">
-          <kbd>Enter</kbd> 继续
+          <kbd>Enter</kbd> {t.learn.continueKey}
         </span>
       </footer>
     </div>
   );
 }
 
-const KIND_LABEL: Record<QuizKind, string> = {
-  meaning: "它是什么意思？",
-  picture: "看图，补全这句话",
-  listen: "听，是哪个词？",
-  spell: "拼出这个词",
-};
-
 function Quiz({ step, session }: { step: Step & { kind: QuizKind }; session: ActiveSession }) {
   const atlas = useAtlas();
   const ref = atlas.byId.get(step.id)!;
   const { entry } = useEntry(step.id);
   const settings = useStore((s) => s.settings);
+  const lang = useLang();
+  const t = useT();
   const pending = session.pending;
   const elapsed = useStepTimer();
   const [hints, setHints] = useState(0);
+  const [, setOptReady] = useState(0);
   const options = useMemo(() => (step.options ?? []).map((id) => atlas.byId.get(id)!).filter(Boolean), [atlas, step.options]);
+
+  useEffect(() => {
+    if (step.options?.length) {
+      void prefetch(atlas, step.options).then(() => setOptReady((n) => n + 1));
+    }
+  }, [atlas, step.options]);
 
   const submit = useCallback(
     (value: string, correct: boolean) => {
@@ -174,13 +185,14 @@ function Quiz({ step, session }: { step: Step & { kind: QuizKind }; session: Act
 
   if (!entry) return <span className="spinner" />;
   const sentence = entry.ex[0] ? gap(entry.ex[0].en, entry.w) : null;
+  const primarySense = lang === "zh" ? entry.senses[0].zh : entry.senses[0].en || entry.senses[0].zh;
 
   return (
     <div className={`quiz quiz-${step.kind} ${pending ? (pending.correct ? "is-right" : "is-wrong") : ""}`}>
       <p className="stage-label">
         <span className={`dot ${step.retry ? "dot-retry" : "dot-review"}`} />
-        {step.retry ? "再见一面 · " : ""}
-        {KIND_LABEL[step.kind]}
+        {step.retry ? t.learn.seeAgain : ""}
+        {t.learn.kinds[step.kind]}
       </p>
 
       <section className="prompt">
@@ -203,20 +215,22 @@ function Quiz({ step, session }: { step: Step & { kind: QuizKind }; session: Act
                   {sentence.after}
                 </>
               ) : (
-                entry.senses[0].zh
+                primarySense
               )}
             </p>
-            {sentence && pending && <p className="cloze-zh">{entry.ex[0].zh}</p>}
+            {sentence && pending && (
+              <p className="cloze-zh">{lang === "zh" ? entry.ex[0].zh : `${entry.senses[0].pos} ${primarySense}`}</p>
+            )}
           </div>
         )}
         {step.kind === "listen" && (
           <div className="prompt-listen">
-            <button className="listen-orb" onClick={() => play(atlas.audio(entry, settings.accent), entry.w, settings.accent)} aria-label="再听一遍">
+            <button className="listen-orb" onClick={() => play(atlas.audio(entry, settings.accent), entry.w, settings.accent)} aria-label={t.learn.listenAgain}>
               <Volume2 size={40} strokeWidth={1.6} />
               <span />
             </button>
             <button className="link" onClick={() => play(atlas.audio(entry, settings.accent), entry.w, settings.accent, 0.7)}>
-              慢速再听
+              {t.learn.listenSlow}
             </button>
           </div>
         )}
@@ -231,11 +245,20 @@ function Quiz({ step, session }: { step: Step & { kind: QuizKind }; session: Act
             const isAnswer = o.id === ref.id;
             const chosen = pending?.value === o.id;
             const cls = pending ? (isAnswer ? "is-answer" : chosen ? "is-chosen" : "is-dim") : "";
+            const optEntry = atlas.peek(o.id);
+            const meaningText =
+              lang === "zh"
+                ? o.zh
+                : optEntry?.senses[0]?.en
+                  ? `${optEntry.senses[0].pos} ${optEntry.senses[0].en}`
+                  : o.zh;
             return (
               <li key={o.id}>
                 <button className={`option ${cls}`} data-option={o.id} onClick={() => submit(o.id, isAnswer)} disabled={!!pending}>
                   <kbd>{i + 1}</kbd>
-                  <span lang={step.kind === "meaning" ? "zh" : "en"}>{step.kind === "meaning" ? o.zh : o.word}</span>
+                  <span lang={step.kind === "meaning" && lang === "zh" ? "zh" : "en"}>
+                    {step.kind === "meaning" ? meaningText : o.word}
+                  </span>
                   {pending && isAnswer && <Check size={20} className="option-mark" />}
                   {pending && chosen && !isAnswer && <X size={20} className="option-mark" />}
                 </button>
@@ -253,14 +276,17 @@ function Quiz({ step, session }: { step: Step & { kind: QuizKind }; session: Act
 function SpellPrompt({ entry, refw, hints }: { entry: Entry; refw: WordRef; hints: number }) {
   const atlas = useAtlas();
   const accent = useStore((s) => s.settings.accent);
+  const lang = useLang();
+  const t = useT();
   const sentence = entry.ex[0] ? gap(entry.ex[0].en, entry.w) : null;
   void hints;
+  const meaning = lang === "zh" ? entry.senses[0].zh : entry.senses[0].en || entry.senses[0].zh;
   return (
     <div className="prompt-spell">
       <Illustration src={atlas.img(entry)} word={entry.w} topic={refw.topic} eager className="spell-art" />
       <div>
         <p className="spell-zh">
-          <span className="pos">{entry.senses[0].pos}</span> {entry.senses[0].zh}
+          <span className="pos">{entry.senses[0].pos}</span> {meaning}
         </p>
         {sentence && (
           <p className="cloze cloze-sm" lang="en">
@@ -269,7 +295,7 @@ function SpellPrompt({ entry, refw, hints }: { entry: Entry; refw: WordRef; hint
             {sentence.after}
           </p>
         )}
-        <Speak url={atlas.audio(entry, accent)} text={entry.w} accent={accent} size="sm" label="听发音" />
+        <Speak url={atlas.audio(entry, accent)} text={entry.w} accent={accent} size="sm" label={t.learn.listenPron} />
       </div>
     </div>
   );
@@ -278,6 +304,7 @@ function SpellPrompt({ entry, refw, hints }: { entry: Entry; refw: WordRef; hint
 function SpellInput({ entry, pending, hints, onHint, onSubmit }: { entry: Entry; pending?: { correct: boolean; value: string }; hints: number; onHint: () => void; onSubmit: (v: string) => void }) {
   const [value, setValue] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const t = useT();
   const target = entry.w;
   const prefix = target.slice(0, hints);
   useEffect(() => {
@@ -315,16 +342,16 @@ function SpellInput({ entry, pending, hints, onHint, onSubmit }: { entry: Entry;
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="done"
-        aria-label={`拼写，${target.length} 个字符`}
+        aria-label={t.learn.spellAria(target.length)}
         readOnly={!!pending}
       />
       {!pending && (
         <div className="spell-actions">
           <button type="button" className="btn btn-ghost" onClick={onHint} disabled={hints >= target.length - 1}>
-            <Lightbulb size={17} /> 提示字母
+            <Lightbulb size={17} /> {t.learn.hintLetter}
           </button>
           <button type="submit" className="btn btn-primary" disabled={!value.trim()}>
-            确认 <kbd>Enter</kbd>
+            {t.learn.confirm} <kbd>Enter</kbd>
           </button>
         </div>
       )}
@@ -334,6 +361,8 @@ function SpellInput({ entry, pending, hints, onHint, onSubmit }: { entry: Entry;
 
 function Feedback({ entry, refw, correct, onNext }: { entry: Entry; refw: WordRef; correct: boolean; onNext: () => void }) {
   const atlas = useAtlas();
+  const lang = useLang();
+  const t = useT();
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus({ preventScroll: true }), []);
   return (
@@ -341,7 +370,7 @@ function Feedback({ entry, refw, correct, onNext }: { entry: Entry; refw: WordRe
       <div className="feedback-inner">
         <Illustration src={atlas.img(entry, "thumb")} word={entry.w} topic={refw.topic} className="feedback-art" />
         <div className="feedback-text">
-          <p className="feedback-verdict">{correct ? "答对了" : "没关系，记住它"}</p>
+          <p className="feedback-verdict">{correct ? t.learn.correct : t.learn.wrong}</p>
           <p className="feedback-word">
             <b lang="en">{entry.w}</b>
             <span className="ipa">{entry.uk || entry.us}</span>
@@ -349,8 +378,8 @@ function Feedback({ entry, refw, correct, onNext }: { entry: Entry; refw: WordRe
           <p className="feedback-zh">
             {entry.senses
               .slice(0, 2)
-              .map((s) => `${s.pos} ${s.zh}`)
-              .join("　")}
+              .map((s) => `${s.pos} ${lang === "zh" ? s.zh : s.en || s.zh}`)
+              .join(" · ")}
           </p>
           {entry.ex[0] && (
             <p className="feedback-ex" lang="en">
@@ -359,7 +388,7 @@ function Feedback({ entry, refw, correct, onNext }: { entry: Entry; refw: WordRe
           )}
         </div>
         <button ref={btn} className={`btn btn-xl ${correct ? "btn-sage" : "btn-terra"}`} onClick={onNext}>
-          继续 <ArrowRight size={20} />
+          {t.learn.continueBtn} <ArrowRight size={20} />
         </button>
       </div>
     </div>
@@ -368,6 +397,8 @@ function Feedback({ entry, refw, correct, onNext }: { entry: Entry; refw: WordRe
 
 function Summary({ session }: { session: ActiveSession }) {
   const atlas = useAtlas();
+  const lang = useLang();
+  const t = useT();
   useEffect(() => {
     if (store.get().settings.sfx) void cue("complete");
   }, []);
@@ -388,54 +419,60 @@ function Summary({ session }: { session: ActiveSession }) {
       <div className="summary-card">
         <div className="summary-sky">
           <Galaxy mode="mini" highlight={words.map((w) => w.id)} ignite />
-          <p>今天点亮了 {words.length} 颗星</p>
+          <p>{t.learn.summarySky(words.length)}</p>
         </div>
-        <p className="eyebrow">这一程结束了</p>
-        <h1 className="display">{stats.accuracy >= 90 ? "漂亮的一程。" : stats.accuracy >= 60 ? "稳稳向前。" : "错过的，会再相遇。"}</h1>
+        <p className="eyebrow">{t.learn.summaryEyebrow}</p>
+        <h1 className="display">
+          {stats.accuracy >= 90 ? t.learn.summaryGreat : stats.accuracy >= 60 ? t.learn.summaryGood : t.learn.summaryKeepGoing}
+        </h1>
         <div className="summary-stats">
           <Ring value={stats.accuracy / 100} size={128} tone={stats.accuracy >= 60 ? "sage" : "terra"}>
             <b>{stats.accuracy}%</b>
-            <small>首次正确</small>
+            <small>{t.learn.firstTryAcc}</small>
           </Ring>
           <dl>
             <div>
-              <dt>新词</dt>
+              <dt>{t.learn.newWords}</dt>
               <dd>{session.newIds.length}</dd>
             </div>
             <div>
-              <dt>复习</dt>
+              <dt>{t.learn.reviews}</dt>
               <dd>{session.reviewIds.length}</dd>
             </div>
             <div>
-              <dt>用时</dt>
+              <dt>{t.learn.timeSpent}</dt>
               <dd>
                 {minutes}
-                <small>分钟</small>
+                <small>{t.learn.minutesUnit}</small>
               </dd>
             </div>
           </dl>
         </div>
         <ul className="summary-words">
-          {words.map((w) => (
-            <li key={w.id} className={session.graded[w.id] === Rating.Again ? "is-wrong" : ""}>
-              <Illustration src={atlas.img(w, "thumb")} word={w.word} topic={w.topic} />
-              <span lang="en">{w.word}</span>
-              <small>{w.zh}</small>
-            </li>
-          ))}
+          {words.map((w) => {
+            const e = atlas.peek(w.id);
+            const sub = lang === "zh" ? w.zh : e?.senses[0]?.en ? `${e.senses[0].pos} ${e.senses[0].en}` : w.ipa;
+            return (
+              <li key={w.id} className={session.graded[w.id] === Rating.Again ? "is-wrong" : ""}>
+                <Illustration src={atlas.img(w, "thumb")} word={w.word} topic={w.topic} />
+                <span lang="en">{w.word}</span>
+                <small>{sub}</small>
+              </li>
+            );
+          })}
         </ul>
-        <p className="summary-note">FSRS 已为每个词排好下次相遇的时间。答错的词，会更早回来。</p>
+        <p className="summary-note">{t.learn.fsrsNote}</p>
         <div className="summary-actions">
           {wrong.length > 0 && (
             <button className="btn btn-ghost" onClick={again}>
-              <RotateCcw size={18} /> 再练 {wrong.length} 个错词
+              <RotateCcw size={18} /> {t.learn.retryWrong(wrong.length)}
             </button>
           )}
           <button className="btn btn-ghost" onClick={() => shareSession(atlas, session)}>
-            <Share2 size={18} /> 分享成绩卡
+            <Share2 size={18} /> {t.learn.shareCard}
           </button>
           <button className="btn btn-primary btn-xl" onClick={done} ref={(b) => b?.focus({ preventScroll: true })}>
-            完成 <ArrowRight size={20} />
+            {t.learn.finishBtn} <ArrowRight size={20} />
           </button>
         </div>
       </div>

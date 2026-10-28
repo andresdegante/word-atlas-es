@@ -83,8 +83,30 @@ export const MASTERED_STABILITY = 21;
 export const isMastered = (c?: CardState) => !!c && c.st === 2 && c.s >= MASTERED_STABILITY;
 export const isLearning = (c?: CardState) => !!c && !isMastered(c);
 
-export function formatInterval(ms: number) {
+export function formatInterval(ms: number, lang: "es" | "en" | "zh" = "es") {
   const m = Math.round(ms / 60000);
+  if (lang === "es") {
+    if (m < 1) return "<1 min";
+    if (m < 60) return `${m} min`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} h`;
+    const d = Math.round(h / 24);
+    if (d < 31) return `${d} d`;
+    const mo = Math.round(d / 30);
+    if (mo < 12) return `${mo} mes${mo > 1 ? "es" : ""}`;
+    return `${(d / 365).toFixed(1)} años`;
+  }
+  if (lang === "en") {
+    if (m < 1) return "<1m";
+    if (m < 60) return `${m}m`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h`;
+    const d = Math.round(h / 24);
+    if (d < 31) return `${d}d`;
+    const mo = Math.round(d / 30);
+    if (mo < 12) return `${mo}mo`;
+    return `${(d / 365).toFixed(1)}y`;
+  }
   if (m < 1) return "<1分";
   if (m < 60) return `${m}分`;
   const h = Math.round(m / 60);
